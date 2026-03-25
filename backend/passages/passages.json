@@ -1,0 +1,20 @@
+{
+  "grade4_english_A_pretest": {
+    "title": "The Old Balete Tree",
+    "grade_level": 4,
+    "language": "English",
+    "set": "A",
+    "cycle": "pre-test",
+    "word_count": 42,
+    "text": "Once there was an old balete tree near the river. Children passed it every morning on their way to school. They said the tree looked strange at night, but in the daylight it gave cool shade and a quiet place to rest."
+  },
+  "grade4_english_B_pretest": {
+    "title": "A Day in the Garden",
+    "grade_level": 4,
+    "language": "English",
+    "set": "B",
+    "cycle": "pre-test",
+    "word_count": 39,
+    "text": "Lina watered the garden before the sun grew hot. Tiny birds hopped between the pots while her brother pulled weeds beside the fence. By noon the plants looked fresh, and the tomatoes shone bright red under the light."
+  }
+}
