@@ -12,13 +12,16 @@ from backend.media import (
     validate_upload_extension,
 )
 from backend.passages.service import get_passage_or_404, list_passage_summaries
-from backend.schemas import AssessmentResponse, PassageSummary
+from backend.pipeline.align import force_align_words
+from backend.pipeline.transcribe import TranscriptionError, transcribe_audio
+from backend.schemas import AlignedWordRecord, AssessmentResponse, PassageSummary
+from backend.config import get_whisper_model_name
 
 
 app = FastAPI(
     title="Phil-IRI ASR MVP",
     version="0.1.0",
-    description="Phase 1 backend scaffold for upload validation and audio normalization.",
+    description="Phase 2 backend scaffold with Whisper transcription and WhisperX alignment.",
 )
 
 app.add_middleware(
@@ -56,12 +59,21 @@ async def assess_recording(
         temp_path = Path(temp_dir)
         upload_path = temp_path / f"upload{file_extension}"
         normalized_path = temp_path / "normalized.wav"
+        transcription = None
+        alignment = None
 
         try:
             await save_upload_file(file, upload_path)
             normalize_media_to_wav(upload_path, normalized_path)
+            transcription = transcribe_audio(
+                normalized_path,
+                model_name=get_whisper_model_name(),
+            )
+            alignment = force_align_words(normalized_path, transcription)
         except AudioProcessingError as error:
             raise to_http_exception(error) from error
+        except TranscriptionError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
         except HTTPException:
             raise
         except Exception as error:  # pragma: no cover - defensive API boundary
@@ -69,7 +81,12 @@ async def assess_recording(
 
     return AssessmentResponse(
         passage_id=passage.id,
-        transcript="",
+        transcript=transcription.transcript if transcription else "",
+        alignment_source=alignment.source if alignment else None,
+        aligned_words=[
+            AlignedWordRecord(word=word.word, start=word.start, end=word.end)
+            for word in (alignment.words if alignment else [])
+        ],
         total_words=passage.word_count,
         major_miscue_count=0,
         miscues=[],

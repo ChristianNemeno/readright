@@ -33,9 +33,17 @@ class MiscueRecord(BaseModel):
     counts_as_major_miscue: Optional[bool] = None
 
 
+class AlignedWordRecord(BaseModel):
+    word: str
+    start: Optional[float] = None
+    end: Optional[float] = None
+
+
 class AssessmentResponse(BaseModel):
     passage_id: str
     transcript: str = ""
+    alignment_source: Optional[str] = None
+    aligned_words: list[AlignedWordRecord] = Field(default_factory=list)
     wpm: Optional[float] = None
     word_recognition_pct: Optional[float] = None
     reading_level: Optional[str] = None

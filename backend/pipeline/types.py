@@ -20,4 +20,5 @@ class TranscriptionResult:
 @dataclass(slots=True)
 class AlignmentResult:
     words: list[WordSegment] = field(default_factory=list)
+    source: str = "whisper"
     metadata: dict[str, Any] = field(default_factory=dict)
