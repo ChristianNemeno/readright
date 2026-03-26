@@ -1,12 +1,15 @@
 import os
+import platform
 import shutil
 import subprocess
 from pathlib import Path
 
-# Ensure ffmpeg is findable even if PATH wasn't updated before this process started
-_FFMPEG_FALLBACK = r"C:\Nemeno\ffmpeg-2026-03-22-git-9c63742425-essentials_build\bin"
-if _FFMPEG_FALLBACK not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = _FFMPEG_FALLBACK + os.pathsep + os.environ.get("PATH", "")
+# On Windows, inject the local ffmpeg build directory if it exists and isn't already on PATH.
+# This is a no-op on Linux/macOS (where ffmpeg is installed via the system package manager).
+if platform.system() == "Windows":
+    _FFMPEG_FALLBACK = r"C:\Nemeno\ffmpeg-2026-03-22-git-9c63742425-essentials_build\bin"
+    if _FFMPEG_FALLBACK not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = _FFMPEG_FALLBACK + os.pathsep + os.environ.get("PATH", "")
 
 from fastapi import HTTPException, UploadFile, status
 

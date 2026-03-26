@@ -17,7 +17,7 @@ from backend.pipeline.miscue import classify_miscues, tokenize_words
 from backend.pipeline.score import compute_scores, estimate_reading_time_seconds
 from backend.pipeline.transcribe import TranscriptionError, transcribe_audio
 from backend.schemas import AlignedWordRecord, AssessmentResponse, Passage, PassageSummary
-from backend.config import get_whisper_model_name
+from backend.config import get_cors_origins, get_whisper_model_name
 
 
 app = FastAPI(
@@ -28,12 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

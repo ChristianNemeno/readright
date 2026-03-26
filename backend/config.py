@@ -48,3 +48,22 @@ def get_align_model_name() -> str | None:
 
 def use_local_models_only() -> bool:
     return _env_flag("PHILIRI_LOCAL_MODELS_ONLY", default=False)
+
+
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+
+def get_cors_origins() -> list[str]:
+    """Return allowed CORS origins.
+
+    Set PHILIRI_CORS_ORIGINS to a comma-separated list to extend the defaults,
+    e.g. "https://my-frontend-abc123-uc.a.run.app"
+    """
+    extra = os.getenv("PHILIRI_CORS_ORIGINS", "")
+    extra_origins = [o.strip() for o in extra.split(",") if o.strip()]
+    return _DEFAULT_CORS_ORIGINS + extra_origins
