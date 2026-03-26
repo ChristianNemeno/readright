@@ -1,4 +1,5 @@
-import json
+﻿import json
+import re
 from functools import lru_cache
 
 from fastapi import HTTPException, status
@@ -6,15 +7,32 @@ from fastapi import HTTPException, status
 from backend.config import PASSAGES_PATH
 from backend.schemas import Passage, PassageSummary
 
+WORD_RE = re.compile(r"\b[\w']+\b", re.UNICODE)
+
+
+class PassageDataError(RuntimeError):
+    """Raised when the passage catalog contains inconsistent scoring data."""
+
+
+def count_passage_words(text: str) -> int:
+    return len(WORD_RE.findall(text))
+
 
 @lru_cache(maxsize=1)
 def load_passages() -> dict[str, Passage]:
-    with PASSAGES_PATH.open("r", encoding="utf-8") as passages_file:
+    with PASSAGES_PATH.open("r", encoding="utf-8-sig") as passages_file:
         raw_passages = json.load(passages_file)
 
     passages: dict[str, Passage] = {}
     for passage_id, payload in raw_passages.items():
-        passages[passage_id] = Passage(id=passage_id, **payload)
+        passage = Passage(id=passage_id, **payload)
+        actual_word_count = count_passage_words(passage.text)
+        if actual_word_count != passage.word_count:
+            raise PassageDataError(
+                "Passage word-count mismatch for "
+                f"'{passage_id}': declared {passage.word_count}, actual {actual_word_count}."
+            )
+        passages[passage_id] = passage
 
     return passages
 
@@ -44,3 +62,4 @@ def get_passage_or_404(passage_id: str) -> Passage:
             detail=f"Unknown passage_id '{passage_id}'.",
         )
     return passage
+

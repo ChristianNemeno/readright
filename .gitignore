@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# MyPy
+.mypy_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Package lock (optional: remove if you want to track it)
+# frontend/package-lock.json
+
+# Hugging Face model cache
+.cache/
+
+# Uploads / temp files
+uploads/
+tmp/
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.webm
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Env files
+.env
+.env.*

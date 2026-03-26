@@ -1,0 +1,3 @@
+student_id,recording_path,passage_id,teacher_major_miscues,teacher_word_recognition_pct,teacher_wpm
+student_001,recordings/student_001.wav,grade4_english_A_pretest,4,90.48,82
+student_002,recordings/student_002.wav,grade4_english_B_pretest,2,94.87,88
