@@ -2,19 +2,6 @@ import { startTransition, useEffect, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-const CARD_COLORS = [
-  "#FFE082", "#B3E5FC", "#C8E6C9", "#F8BBD9",
-  "#D1C4E9", "#FFCCBC", "#B2EBF2", "#DCEDC8",
-];
-const CONFETTI_COLORS = ["#FFE066", "#4FC3F7", "#81C784", "#FF8A65", "#F48FB1", "#CE93D8"];
-const CONFETTI_PIECES = Array.from({ length: 25 }, (_, i) => ({
-  id: i,
-  left: (i * 17 + 5) % 100,
-  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-  delay: (i * 0.15) % 2,
-  duration: 2.5 + (i % 5) * 0.4,
-  size: 8 + (i % 4) * 3,
-}));
 
 function pickMimeType() {
   if (typeof MediaRecorder === "undefined") return "";
@@ -38,27 +25,6 @@ function formatTime(s) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
-function Confetti() {
-  return (
-    <div className="confetti-wrap" aria-hidden="true">
-      {CONFETTI_PIECES.map((p) => (
-        <div
-          key={p.id}
-          className="confetti-piece"
-          style={{
-            left: `${p.left}%`,
-            backgroundColor: p.color,
-            animationDelay: `${p.delay}s`,
-            animationDuration: `${p.duration}s`,
-            width: `${p.size}px`,
-            height: `${p.size}px`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 function Stars({ count, total = 3 }) {
   return (
     <div className="stars-row">
@@ -69,30 +35,84 @@ function Stars({ count, total = 3 }) {
   );
 }
 
+function Soundwave({ stream, active }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (!stream || !active) return;
+    let animId;
+    let audioCtx;
+    try {
+      audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      source.connect(analyser);
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const BARS = 32;
+      const supportsRoundRect = typeof ctx.roundRect === "function";
+
+      function draw() {
+        animId = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const barW = Math.floor(canvas.width / BARS) - 2;
+        const cy = canvas.height / 2;
+        for (let i = 0; i < BARS; i++) {
+          const v = dataArray[Math.floor((i * bufferLength) / BARS)] / 255;
+          const h = Math.max(4, v * canvas.height * 0.85);
+          ctx.fillStyle = `rgba(56, 189, 248, ${0.35 + v * 0.65})`;
+          const x = i * (barW + 2);
+          if (supportsRoundRect) {
+            ctx.beginPath();
+            ctx.roundRect(x, cy - h / 2, barW, h, 2);
+            ctx.fill();
+          } else {
+            ctx.fillRect(x, cy - h / 2, barW, h);
+          }
+        }
+      }
+      draw();
+    } catch (_) {}
+
+    return () => {
+      cancelAnimationFrame(animId);
+      audioCtx?.close();
+    };
+  }, [stream, active]);
+
+  return (
+    <div className="soundwave-wrap">
+      <canvas
+        ref={canvasRef}
+        className={`soundwave-canvas ${active ? "soundwave-active" : ""}`}
+        width={280}
+        height={64}
+      />
+    </div>
+  );
+}
+
 function SelectScreen({ passages, loading, onSelect }) {
   return (
     <div className="screen screen-select">
       <header className="app-header">
-        <span className="owl-mascot">🦉</span>
-        <h1 className="app-title">ReadRight</h1>
-        <p className="app-subtitle">Pick a story to read!</p>
+        <span className="app-logo">ReadRight</span>
+        <p className="app-subtitle">Phil-IRI Reading Assessment</p>
       </header>
 
       {loading ? (
         <div className="loading-state">
-          <span className="loading-spinner">📚</span>
-          <p>Loading stories...</p>
+          <div className="loading-ring" />
+          <p>Loading passages...</p>
         </div>
       ) : (
         <div className="passage-grid">
-          {passages.map((p, i) => (
-            <button
-              key={p.id}
-              className="passage-card"
-              style={{ backgroundColor: CARD_COLORS[i % CARD_COLORS.length] }}
-              onClick={() => onSelect(p)}
-            >
-              <span className="passage-card-icon">📖</span>
+          {passages.map((p) => (
+            <button key={p.id} className="passage-card" onClick={() => onSelect(p)}>
               <h3 className="passage-card-title">{p.title}</h3>
               <div className="passage-card-meta">
                 <span className="grade-badge">Grade {p.grade_level}</span>
@@ -108,20 +128,21 @@ function SelectScreen({ passages, loading, onSelect }) {
 }
 
 function ReadScreen({
-  passage, recordingState, recordedBlob, selectedFile,
+  passage, recordingState, recordedBlob, selectedFile, liveStream,
   isSubmitting, errorMessage,
   onBack, onStartRecording, onStopRecording, onFileChange, onSubmit,
 }) {
   const hasAudio = !!(selectedFile ?? recordedBlob);
   const fileInputRef = useRef(null);
+  const isRecording = recordingState === "recording";
 
-  const statusText = recordingState === "recording"
-    ? "🔴 Recording... tap to stop"
+  const statusText = isRecording
+    ? "Recording — tap to stop"
     : recordedBlob
-      ? "✅ Recording ready!"
+      ? "Recording ready"
       : selectedFile
-        ? `✅ ${selectedFile.name}`
-        : "Tap the mic to start!";
+        ? selectedFile.name
+        : "Tap the mic to start";
 
   return (
     <div className="screen screen-read">
@@ -138,13 +159,15 @@ function ReadScreen({
       {errorMessage && <div className="error-bubble">{errorMessage}</div>}
 
       <div className="record-area">
+        <Soundwave stream={liveStream} active={isRecording} />
+
         <p className="record-hint">{statusText}</p>
 
         <button
-          className={`mic-btn ${recordingState === "recording" ? "mic-btn--recording" : ""}`}
-          onClick={recordingState === "recording" ? onStopRecording : onStartRecording}
+          className={`mic-btn ${isRecording ? "mic-btn--recording" : ""}`}
+          onClick={isRecording ? onStopRecording : onStartRecording}
           disabled={isSubmitting || typeof MediaRecorder === "undefined"}
-          aria-label={recordingState === "recording" ? "Stop recording" : "Start recording"}
+          aria-label={isRecording ? "Stop recording" : "Start recording"}
         >
           🎤
         </button>
@@ -152,7 +175,7 @@ function ReadScreen({
         <div className="or-divider"><span>or</span></div>
 
         <button className="upload-btn" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-          📁 Upload Recording
+          Upload File
         </button>
         <input
           ref={fileInputRef}
@@ -162,12 +185,8 @@ function ReadScreen({
           style={{ display: "none" }}
         />
 
-        <button
-          className="submit-btn"
-          onClick={onSubmit}
-          disabled={isSubmitting || !hasAudio}
-        >
-          {isSubmitting ? "⏳ Checking..." : "✨ Check My Reading!"}
+        <button className="submit-btn" onClick={onSubmit} disabled={isSubmitting || !hasAudio}>
+          {isSubmitting ? "Analyzing..." : "Analyze Recording"}
         </button>
       </div>
     </div>
@@ -176,24 +195,19 @@ function ReadScreen({
 
 function ResultScreen({ result, onTryAgain, onPickNew }) {
   const stars = getStars(result?.reading_level);
-  const showConfetti = stars === 3;
 
   const levelMessage = {
-    3: "Amazing job! 🎉",
-    2: "Good reading! Keep it up! 😊",
-    1: "Keep practicing! You can do it! 💪",
-    0: "Assessment complete!",
+    3: "Independent level achieved",
+    2: "Instructional level",
+    1: "Frustration level",
+    0: "Assessment complete",
   }[stars];
 
   const recognitionPct = result?.word_recognition_pct ?? 0;
-  const recognitionFace = recognitionPct >= 95 ? "😄" : recognitionPct >= 90 ? "🙂" : "😐";
 
   return (
     <div className="screen screen-result">
-      {showConfetti && <Confetti />}
-
       <div className="result-hero">
-        <span className="owl-mascot owl-big">🦉</span>
         <Stars count={stars} />
         <p className="level-message">{levelMessage}</p>
         {result?.reading_level && (
@@ -202,18 +216,15 @@ function ResultScreen({ result, onTryAgain, onPickNew }) {
       </div>
 
       <div className="metrics-row">
-        <div className="metric-bubble metric-wpm">
-          <span className="metric-icon">⚡</span>
+        <div className="metric-bubble">
           <strong className="metric-value">{result?.wpm ?? "—"}</strong>
-          <span className="metric-label">Words/Min</span>
+          <span className="metric-label">WPM</span>
         </div>
-        <div className="metric-bubble metric-time">
-          <span className="metric-icon">⏱️</span>
+        <div className="metric-bubble">
           <strong className="metric-value">{formatTime(result?.reading_time_seconds)}</strong>
           <span className="metric-label">Time</span>
         </div>
-        <div className="metric-bubble metric-words">
-          <span className="metric-icon">📝</span>
+        <div className="metric-bubble">
           <strong className="metric-value">{result?.total_words ?? "—"}</strong>
           <span className="metric-label">Words</span>
         </div>
@@ -227,12 +238,11 @@ function ResultScreen({ result, onTryAgain, onPickNew }) {
         <div className="progress-track">
           <div className="progress-fill" style={{ width: `${recognitionPct}%` }} />
         </div>
-        <div className="progress-face">{recognitionFace}</div>
       </div>
 
       {result?.miscues?.length > 0 && (
         <div className="miscue-section">
-          <h3 className="miscue-title">How I Read Each Word</h3>
+          <h3 className="miscue-title">Miscue Analysis</h3>
           <div className="miscue-stream">
             {result.miscues.map((m, i) => (
               <span key={i} className={`word-chip word-chip--${m.type}`} title={m.type}>
@@ -250,8 +260,8 @@ function ResultScreen({ result, onTryAgain, onPickNew }) {
       )}
 
       <div className="result-actions">
-        <button className="action-btn action-btn--secondary" onClick={onTryAgain}>🔁 Try Again</button>
-        <button className="action-btn action-btn--primary" onClick={onPickNew}>📚 New Story</button>
+        <button className="action-btn action-btn--secondary" onClick={onTryAgain}>Try Again</button>
+        <button className="action-btn action-btn--primary" onClick={onPickNew}>New Passage</button>
       </div>
     </div>
   );
@@ -265,6 +275,7 @@ export default function App() {
   const [recordingState, setRecordingState] = useState("idle");
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [liveStream, setLiveStream] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -324,11 +335,13 @@ export default function App() {
       chunksRef.current = [];
       recorderRef.current = recorder;
       streamRef.current = stream;
+      setLiveStream(stream);
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {
         const outMime = recorder.mimeType || mimeType || "audio/webm";
         setRecordedBlob(new Blob(chunksRef.current, { type: outMime }));
         setRecordingState("stopped");
+        setLiveStream(null);
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       };
@@ -337,6 +350,7 @@ export default function App() {
     } catch (e) {
       setErrorMessage(e.message || "Microphone access failed.");
       setRecordingState("idle");
+      setLiveStream(null);
     }
   }
 
@@ -352,7 +366,7 @@ export default function App() {
 
   async function handleSubmit() {
     const uploadBlob = selectedFile ?? recordedBlob;
-    if (!uploadBlob) { setErrorMessage("Please record or upload audio first!"); return; }
+    if (!uploadBlob) { setErrorMessage("Please record or upload audio first."); return; }
     setErrorMessage("");
     const formData = new FormData();
     const fileName = selectedFile?.name ?? `recording.${getExt(recordedBlob?.type || "audio/webm")}`;
@@ -381,6 +395,7 @@ export default function App() {
         recordingState={recordingState}
         recordedBlob={recordedBlob}
         selectedFile={selectedFile}
+        liveStream={liveStream}
         isSubmitting={isSubmitting}
         errorMessage={errorMessage}
         onBack={() => setScreen("select")}
