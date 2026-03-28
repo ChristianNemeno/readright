@@ -6,6 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ReadRight is a Phil-IRI (Philippine Informal Reading Inventory) ASR MVP. It records or accepts student audio, transcribes it with Whisper, aligns it with WhisperX, classifies miscues, and computes word recognition scores. No database, no auth — single-purpose assessment tool.
 
+## Running the App
+
+### Docker (recommended — runs everything together)
+
+```bash
+docker compose up --build
+```
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+
+Whisper models are downloaded on first run and cached in a Docker volume (`model_cache`), so initial startup is slow. Subsequent starts are fast.
+
+To set a custom backend URL (e.g. for a remote VM):
+```bash
+API_URL=http://<host-ip>:8000 docker compose up --build
+```
+
+---
+
 ## Development Commands
 
 ### Backend
@@ -46,7 +66,9 @@ Copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_BASE_URL` if t
 
 ### External dependency
 
-ffmpeg must be installed and on PATH (or the hardcoded fallback path in `backend/media.py` must be updated to match your local ffmpeg installation).
+ffmpeg must be installed and on PATH. On Windows, `backend/media.py` also tries a hardcoded fallback path — update it to match your local ffmpeg installation if needed.
+
+---
 
 ## Architecture
 
@@ -62,13 +84,16 @@ The assessment pipeline runs sequentially inside `POST /assess`:
 
 ### Configuration (`backend/config.py`)
 
-Runtime behaviour is controlled via environment variables:
-- `WHISPER_MODEL` — model size (default: `base`)
-- `RUNTIME_DEVICE` — `cpu` or `cuda` (default: `cpu`)
-- `MODEL_CACHE_DIR` — optional cache directory for downloaded models
-- `WHISPER_LANGUAGE` — optional language code
-- `ALIGN_MODEL_NAME` — optional WhisperX alignment model override
-- `LOCAL_MODELS_ONLY` — set to `1` to disable network model downloads
+Runtime behaviour is controlled via environment variables (all prefixed `PHILIRI_`):
+- `PHILIRI_WHISPER_MODEL` — model size (default: `base`)
+- `PHILIRI_DEVICE` — `cpu` or `cuda` (default: `cpu`)
+- `PHILIRI_MODEL_CACHE_DIR` — optional cache directory for downloaded models
+- `PHILIRI_WHISPER_LANGUAGE` — optional language code
+- `PHILIRI_ALIGN_MODEL` — optional WhisperX alignment model override
+- `PHILIRI_LOCAL_MODELS_ONLY` — set to `1` to disable network model downloads
+- `PHILIRI_CORS_ORIGINS` — comma-separated list of extra CORS origins beyond the localhost defaults
+
+Allowed upload extensions: `.m4a`, `.mov`, `.mp3`, `.mp4`, `.ogg`, `.wav`, `.webm`
 
 ### Passages (`backend/passages/`)
 
@@ -76,21 +101,29 @@ Passages are stored in `passages/passages.json`. Each entry must have a `word_co
 
 ### API (`backend/main.py`)
 
-- `GET /passages` → list of `PassageSummary`
-- `GET /passages/{passage_id}` → full `Passage`
-- `POST /assess` → multipart form (`audio_file` + `passage_id`) → `AssessmentResponse`
+- `GET /passages` → list of `PassageSummary`, sorted by grade_level, language, title
+- `GET /passages/{passage_id}` → full `Passage`, 404 if not found
+- `POST /assess` → multipart form (`file` + `passage_id`) → `AssessmentResponse`
 
-CORS is enabled for `localhost:3000`, `localhost:5173`, and their `127.0.0.1` equivalents.
+CORS is enabled for `localhost:3000`, `localhost:5173`, and their `127.0.0.1` equivalents. Additional origins can be added via `PHILIRI_CORS_ORIGINS`.
+
+### Schemas (`backend/schemas.py`)
+
+Key response types:
+- **AssessmentResponse**: `passage_id`, `transcript`, `alignment_source` (`"whisper"` | `"whisperx"`), `aligned_words`, `wpm`, `word_recognition_pct`, `reading_level`, `reading_time_seconds`, `miscues`, `total_words`, `major_miscue_count`
+- **MiscueRecord**: `target`, `spoken`, `type`, `start`, `end`, `counts_as_major_miscue`
+
+Major miscue types (affect word recognition score): mispronunciation, substitution, omission, insertion, refusal.
 
 ### Frontend (`frontend/src/`)
 
-Single-page React app (Vite) with three screens managed by a `screen` state variable in `App.jsx`:
-- `SelectScreen` — passage grid
-- `ReadScreen` — recording/upload + passage text
-- `ResultScreen` — scores, miscue word chips, confetti for Independent level
+Single-page React app (Vite, React 18) with three screens managed by a `screen` state variable in `App.jsx`:
+- `SelectScreen` — passage grid cards
+- `ReadScreen` — passage text, mic recording button, file upload, submit
+- `ResultScreen` — WPM, word recognition %, reading level, miscue word chips, confetti on Independent level
 
-Uses `MediaRecorder` for in-browser recording with MIME type detection for cross-browser compatibility.
+Uses `MediaRecorder` for in-browser recording with MIME type detection for cross-browser compatibility. Backend URL comes from `VITE_API_BASE_URL` env var (falls back to `http://127.0.0.1:8000`).
 
 ### Validation workflow
 
-`validation/teacher_scores.template.csv` → fill with real data → run `validate_teacher_scores.py` → review `validation/results/`. The thesis success criterion is `within_5pct_word_recognition` (AI vs teacher word recognition within 5 percentage points).
+Fill in `validation/teacher_scores.csv` (see `validation/README.md`) → run `validate_teacher_scores.py` → review `validation/results/`. The thesis success criterion is `within_5pct_word_recognition` (AI vs teacher word recognition within 5 percentage points).
