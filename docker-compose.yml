@@ -3,32 +3,42 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      # Whisper model size: tiny | base | small | medium | large
       PHILIRI_WHISPER_MODEL: base
-      # Change to "cuda" if running on a GPU host
       PHILIRI_DEVICE: cpu
-      # Cache downloaded models to a named volume so they survive rebuilds
       PHILIRI_MODEL_CACHE_DIR: /model_cache
     volumes:
       - model_cache:/model_cache
     restart: unless-stopped
+    networks:
+      default:
+      caddy_net:
+        aliases:
+          - readright-backend
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Set API_URL to the VM's external IP before running docker compose.
-        # e.g.: export API_URL=http://34.123.45.67:8000
-        API_URL: ${API_URL:-http://localhost:8000}
-    ports:
-      - "3000:80"
+        API_URL: https://readright.nenome.online
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      default:
+      caddy_net:
+        aliases:
+          - readright-frontend
+
+networks:
+  default:
+  caddy_net:
+    external: true
 
 volumes:
   model_cache:
