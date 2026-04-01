@@ -26,6 +26,7 @@ VM_NAME="readright-prod"
 MACHINE_TYPE="e2-standard-4"
 DISK_SIZE="20GB"
 NETWORK_TAG="readright-prod"
+SSH_OPTS="--strict-host-key-checking=no"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_ENV="${SCRIPT_DIR}/../deploy.env"
@@ -58,16 +59,34 @@ else
     --image-family="debian-12" \
     --image-project="debian-cloud" \
     --boot-disk-size="${DISK_SIZE}" \
-    --tags="${NETWORK_TAG}" \
-    --metadata=startup-script='#!/bin/bash
-apt-get update -y
-apt-get install -y docker.io docker-compose-plugin git
-systemctl enable docker
-systemctl start docker
-usermod -aG docker debian'
+    --tags="${NETWORK_TAG}"
 
-  echo "→ Waiting 60s for VM startup script to complete..."
-  sleep 60
+  # Wait for SSH to become available (retry up to ~3 min)
+  echo "→ Waiting for SSH to become available..."
+  for i in $(seq 1 18); do
+    if gcloud compute ssh "${VM_NAME}" \
+         --zone="${GCP_ZONE}" --project="${GCP_PROJECT}" \
+         --command="echo ok" ${SSH_OPTS} &>/dev/null; then
+      echo "→ SSH ready."
+      break
+    fi
+    echo "  (attempt ${i}/18, retrying in 10s...)"
+    sleep 10
+  done
+
+  # Install docker and git directly over SSH
+  echo "→ Installing Docker and git on VM..."
+  gcloud compute ssh "${VM_NAME}" \
+    --zone="${GCP_ZONE}" \
+    --project="${GCP_PROJECT}" \
+    ${SSH_OPTS} \
+    --command="
+      set -e
+      sudo apt-get update -y -qq
+      sudo apt-get install -y -qq docker.io docker-compose-plugin git
+      sudo systemctl enable docker
+      sudo systemctl start docker
+    "
 fi
 
 # ── 2. Firewall rules (idempotent) ─────────────────────────────────────────
@@ -104,6 +123,7 @@ echo "→ Syncing code from GitHub on the VM..."
 gcloud compute ssh "${VM_NAME}" \
   --zone="${GCP_ZONE}" \
   --project="${GCP_PROJECT}" \
+  ${SSH_OPTS} \
   --command="
     set -e
     if [ -d ~/readright/.git ]; then
@@ -120,6 +140,7 @@ echo "→ Building and starting containers (first build is slow — Whisper mode
 gcloud compute ssh "${VM_NAME}" \
   --zone="${GCP_ZONE}" \
   --project="${GCP_PROJECT}" \
+  ${SSH_OPTS} \
   --command="
     set -e
     cd ~/readright
