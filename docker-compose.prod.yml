@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PHILIRI_WHISPER_MODEL: base
+      PHILIRI_DEVICE: cpu
+      PHILIRI_MODEL_CACHE_DIR: /model_cache
+      PHILIRI_CORS_ORIGINS: https://readright.nenome.online
+    volumes:
+      - model_cache:/model_cache
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_URL: https://readright.nenome.online/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  model_cache:
+  caddy_data:
+  caddy_config:
