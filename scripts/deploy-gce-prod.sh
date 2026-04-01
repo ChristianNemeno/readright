@@ -74,20 +74,21 @@ else
     sleep 10
   done
 
-  # Install docker and git directly over SSH
-  echo "→ Installing Docker and git on VM..."
-  gcloud compute ssh "${VM_NAME}" \
-    --zone="${GCP_ZONE}" \
-    --project="${GCP_PROJECT}" \
-    ${SSH_OPTS} \
-    --command="
-      set -e
-      sudo apt-get update -y -qq
-      sudo apt-get install -y -qq docker.io docker-compose-plugin git
-      sudo systemctl enable docker
-      sudo systemctl start docker
-    "
 fi
+
+# ── Install dependencies (idempotent — safe to re-run) ─────────────────────
+echo "→ Ensuring Docker and git are installed on VM..."
+gcloud compute ssh "${VM_NAME}" \
+  --zone="${GCP_ZONE}" \
+  --project="${GCP_PROJECT}" \
+  ${SSH_OPTS} \
+  --command="
+    set -e
+    sudo apt-get update -y -qq
+    sudo apt-get install -y -qq docker.io docker-compose-plugin git
+    sudo systemctl enable docker
+    sudo systemctl start docker
+  "
 
 # ── 2. Firewall rules (idempotent) ─────────────────────────────────────────
 echo "→ Ensuring firewall rules for HTTP/HTTPS..."
