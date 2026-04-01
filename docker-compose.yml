@@ -9,6 +9,7 @@ services:
       PHILIRI_WHISPER_MODEL: base
       PHILIRI_DEVICE: cpu
       PHILIRI_MODEL_CACHE_DIR: /model_cache
+      PHILIRI_CORS_ORIGINS: https://readright.nenome.online
     volumes:
       - model_cache:/model_cache
     restart: unless-stopped

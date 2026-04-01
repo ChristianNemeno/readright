@@ -25,11 +25,79 @@ function formatTime(s) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
+/* ── SVG Icons ── */
+function IconMic({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" x2="12" y1="19" y2="22" />
+    </svg>
+  );
+}
+
+function IconStop({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+function IconArrowLeft({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </svg>
+  );
+}
+
+function IconUpload({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" x2="12" y1="3" y2="15" />
+    </svg>
+  );
+}
+
+function IconAlertCircle({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" x2="12" y1="8" y2="12" />
+      <line x1="12" x2="12.01" y1="16" y2="16" />
+    </svg>
+  );
+}
+
+function IconStar({ filled, className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function IconBook({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+    </svg>
+  );
+}
+
 function Stars({ count, total = 3 }) {
   return (
     <div className="stars-row">
       {Array.from({ length: total }, (_, i) => (
-        <span key={i} className={`star ${i < count ? "star-filled" : "star-empty"}`}>★</span>
+        <IconStar 
+          key={i} 
+          filled={i < count} 
+          className={`star ${i < count ? "star-filled" : "star-empty"}`}
+        />
       ))}
     </div>
   );
@@ -105,9 +173,16 @@ function SelectScreen({ passages, loading, onSelect }) {
       </header>
 
       {loading ? (
-        <div className="loading-state">
-          <div className="loading-ring" />
-          <p>Loading passages...</p>
+        <div className="passage-grid">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton skeleton-card" />
+          ))}
+        </div>
+      ) : passages.length === 0 ? (
+        <div className="empty-state">
+          <IconBook className="empty-state-icon" />
+          <p className="empty-state-title">No passages available</p>
+          <p className="empty-state-desc">Please check your connection or try again later.</p>
         </div>
       ) : (
         <div className="passage-grid">
@@ -129,7 +204,7 @@ function SelectScreen({ passages, loading, onSelect }) {
 
 function ReadScreen({
   passage, recordingState, recordedBlob, selectedFile, liveStream,
-  isSubmitting, errorMessage,
+  isSubmitting, errorMessage, recordingTime,
   onBack, onStartRecording, onStopRecording, onFileChange, onSubmit,
 }) {
   const hasAudio = !!(selectedFile ?? recordedBlob);
@@ -147,7 +222,10 @@ function ReadScreen({
   return (
     <div className="screen screen-read">
       <div className="read-topbar">
-        <button className="back-btn" onClick={onBack}>← Back</button>
+        <button className="back-btn" onClick={onBack} aria-label="Go back">
+          <IconArrowLeft />
+          <span>Back</span>
+        </button>
         <span className="read-topbar-title">{passage?.title}</span>
         <span className="grade-badge">Grade {passage?.grade_level}</span>
       </div>
@@ -156,10 +234,19 @@ function ReadScreen({
         <p className="passage-text">{passage?.text ?? "Loading..."}</p>
       </div>
 
-      {errorMessage && <div className="error-bubble">{errorMessage}</div>}
+      {errorMessage && (
+        <div className="error-bubble" role="alert">
+          <IconAlertCircle />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       <div className="record-area">
         <Soundwave stream={liveStream} active={isRecording} />
+
+        {isRecording && recordingTime != null && (
+          <span className="record-timer" aria-live="polite">{formatTime(recordingTime)}</span>
+        )}
 
         <p className="record-hint">{statusText}</p>
 
@@ -169,13 +256,19 @@ function ReadScreen({
           disabled={isSubmitting || typeof MediaRecorder === "undefined"}
           aria-label={isRecording ? "Stop recording" : "Start recording"}
         >
-          🎤
+          {isRecording ? <IconStop /> : <IconMic />}
         </button>
 
         <div className="or-divider"><span>or</span></div>
 
-        <button className="upload-btn" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-          Upload File
+        <button 
+          className="upload-btn" 
+          onClick={() => fileInputRef.current?.click()} 
+          disabled={isSubmitting}
+          aria-label="Upload audio file"
+        >
+          <IconUpload />
+          <span>Upload File</span>
         </button>
         <input
           ref={fileInputRef}
@@ -183,12 +276,50 @@ function ReadScreen({
           accept=".mp4,.mov,.webm,.wav,.m4a,.mp3,.ogg,audio/*,video/*"
           onChange={onFileChange}
           style={{ display: "none" }}
+          aria-hidden="true"
         />
 
         <button className="submit-btn" onClick={onSubmit} disabled={isSubmitting || !hasAudio}>
-          {isSubmitting ? "Analyzing..." : "Analyze Recording"}
+          {isSubmitting ? (
+            <>
+              <span className="btn-spinner" aria-hidden="true" />
+              <span>Analyzing...</span>
+            </>
+          ) : (
+            "Analyze Recording"
+          )}
         </button>
       </div>
+    </div>
+  );
+}
+
+function Confetti() {
+  const colors = ['#38bdf8', '#34d399', '#fbbf24', '#f87171', '#a78bfa'];
+  const pieces = Array.from({ length: 50 }, (_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    delay: `${Math.random() * 2}s`,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    size: 6 + Math.random() * 8,
+  }));
+  
+  return (
+    <div className="confetti-wrapper" aria-hidden="true">
+      {pieces.map((p) => (
+        <div
+          key={p.id}
+          className="confetti"
+          style={{
+            left: p.left,
+            animationDelay: p.delay,
+            backgroundColor: p.color,
+            width: p.size,
+            height: p.size,
+            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -279,9 +410,13 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [showConfetti, setShowConfetti] = useState(false);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const recordingStartRef = useRef(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -306,6 +441,7 @@ export default function App() {
     return () => {
       if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
@@ -329,6 +465,7 @@ export default function App() {
       setErrorMessage("");
       setSelectedFile(null);
       setRecordedBlob(null);
+      setRecordingTime(0);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -336,8 +473,19 @@ export default function App() {
       recorderRef.current = recorder;
       streamRef.current = stream;
       setLiveStream(stream);
+      
+      recordingStartRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - recordingStartRef.current) / 1000);
+        setRecordingTime(elapsed);
+      }, 1000);
+      
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
         const outMime = recorder.mimeType || mimeType || "audio/webm";
         setRecordedBlob(new Blob(chunksRef.current, { type: outMime }));
         setRecordingState("stopped");
@@ -351,10 +499,18 @@ export default function App() {
       setErrorMessage(e.message || "Microphone access failed.");
       setRecordingState("idle");
       setLiveStream(null);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   }
 
   function handleStopRecording() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     if (recorderRef.current?.state !== "inactive") recorderRef.current.stop();
   }
 
@@ -377,7 +533,14 @@ export default function App() {
       const res = await fetch(`${API_BASE}/assess`, { method: "POST", body: formData });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.detail || "Assessment failed.");
-      startTransition(() => { setResult(payload); setScreen("result"); });
+      startTransition(() => { 
+        setResult(payload); 
+        setScreen("result");
+        if (payload.reading_level === "Independent") {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3000);
+        }
+      });
     } catch (e) {
       setErrorMessage(e.message || "Assessment failed.");
     } finally {
@@ -398,6 +561,7 @@ export default function App() {
         liveStream={liveStream}
         isSubmitting={isSubmitting}
         errorMessage={errorMessage}
+        recordingTime={recordingTime}
         onBack={() => setScreen("select")}
         onStartRecording={handleStartRecording}
         onStopRecording={handleStopRecording}
@@ -407,10 +571,13 @@ export default function App() {
     );
   }
   return (
-    <ResultScreen
-      result={result}
-      onTryAgain={() => setScreen("read")}
-      onPickNew={() => setScreen("select")}
-    />
+    <>
+      {showConfetti && <Confetti />}
+      <ResultScreen
+        result={result}
+        onTryAgain={() => setScreen("read")}
+        onPickNew={() => setScreen("select")}
+      />
+    </>
   );
 }
