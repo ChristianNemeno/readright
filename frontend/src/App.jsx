@@ -202,9 +202,33 @@ function SelectScreen({ passages, loading, onSelect }) {
   );
 }
 
+function AnalysisProgress({ percent, stage }) {
+  const stageLabels = {
+    upload_received: "Uploading audio...",
+    media_normalized: "Processing audio...",
+    transcription_complete: "Transcribing speech...",
+    alignment_complete: "Aligning words...",
+    miscue_complete: "Analyzing reading...",
+    complete: "Complete!",
+  };
+
+  return (
+    <div className="analysis-progress" role="progressbar" aria-valuenow={percent} aria-valuemin="0" aria-valuemax="100">
+      <div className="analysis-progress-header">
+        <span className="analysis-progress-label">Analyzing</span>
+        <span className="analysis-progress-percent">{percent}%</span>
+      </div>
+      <div className="analysis-progress-track">
+        <div className="analysis-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="analysis-progress-stage">{stageLabels[stage] || "Processing..."}</p>
+    </div>
+  );
+}
+
 function ReadScreen({
   passage, recordingState, recordedBlob, selectedFile, liveStream,
-  isSubmitting, errorMessage, recordingTime,
+  isSubmitting, errorMessage, recordingTime, analysisProgress,
   onBack, onStartRecording, onStopRecording, onFileChange, onSubmit,
 }) {
   const hasAudio = !!(selectedFile ?? recordedBlob);
@@ -279,16 +303,20 @@ function ReadScreen({
           aria-hidden="true"
         />
 
-        <button className="submit-btn" onClick={onSubmit} disabled={isSubmitting || !hasAudio}>
-          {isSubmitting ? (
-            <>
-              <span className="btn-spinner" aria-hidden="true" />
-              <span>Analyzing...</span>
-            </>
-          ) : (
-            "Analyze Recording"
-          )}
-        </button>
+        {isSubmitting && analysisProgress ? (
+          <AnalysisProgress percent={analysisProgress.percent} stage={analysisProgress.stage} />
+        ) : (
+          <button className="submit-btn" onClick={onSubmit} disabled={isSubmitting || !hasAudio}>
+            {isSubmitting ? (
+              <>
+                <span className="btn-spinner" aria-hidden="true" />
+                <span>Analyzing...</span>
+              </>
+            ) : (
+              "Analyze Recording"
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -412,6 +440,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(null);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
@@ -524,25 +553,79 @@ export default function App() {
     const uploadBlob = selectedFile ?? recordedBlob;
     if (!uploadBlob) { setErrorMessage("Please record or upload audio first."); return; }
     setErrorMessage("");
+    setAnalysisProgress({ percent: 0, stage: "starting" });
     const formData = new FormData();
     const fileName = selectedFile?.name ?? `recording.${getExt(recordedBlob?.type || "audio/webm")}`;
     formData.append("file", uploadBlob, fileName);
     formData.append("passage_id", selectedPassage.id);
+    
     try {
       setIsSubmitting(true);
-      const res = await fetch(`${API_BASE}/assess`, { method: "POST", body: formData });
-      const payload = await res.json();
-      if (!res.ok) throw new Error(payload.detail || "Assessment failed.");
-      startTransition(() => { 
-        setResult(payload); 
-        setScreen("result");
-        if (payload.reading_level === "Independent") {
-          setShowConfetti(true);
-          setTimeout(() => setShowConfetti(false), 3000);
+      
+      // Try SSE streaming endpoint first
+      const res = await fetch(`${API_BASE}/assess-stream`, { method: "POST", body: formData });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Assessment failed.");
+      }
+      
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult = null;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        
+        let eventType = null;
+        let eventData = null;
+        
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            try {
+              eventData = JSON.parse(line.slice(6));
+            } catch { eventData = null; }
+            
+            if (eventType && eventData) {
+              if (eventType === "progress") {
+                setAnalysisProgress({ percent: eventData.percent, stage: eventData.stage });
+              } else if (eventType === "complete") {
+                setAnalysisProgress({ percent: 100, stage: "complete" });
+                finalResult = eventData.result;
+              } else if (eventType === "error") {
+                throw new Error(eventData.message || "Assessment failed.");
+              }
+            }
+            eventType = null;
+            eventData = null;
+          }
         }
-      });
+      }
+      
+      if (finalResult) {
+        startTransition(() => {
+          setResult(finalResult);
+          setScreen("result");
+          setAnalysisProgress(null);
+          if (finalResult.reading_level === "Independent") {
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 3000);
+          }
+        });
+      } else {
+        throw new Error("No result received from assessment.");
+      }
     } catch (e) {
       setErrorMessage(e.message || "Assessment failed.");
+      setAnalysisProgress(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -562,6 +645,7 @@ export default function App() {
         isSubmitting={isSubmitting}
         errorMessage={errorMessage}
         recordingTime={recordingTime}
+        analysisProgress={analysisProgress}
         onBack={() => setScreen("select")}
         onStartRecording={handleStartRecording}
         onStopRecording={handleStopRecording}

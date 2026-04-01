@@ -3,43 +3,28 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     environment:
       PHILIRI_WHISPER_MODEL: base
       PHILIRI_DEVICE: cpu
       PHILIRI_MODEL_CACHE_DIR: /model_cache
-      PHILIRI_CORS_ORIGINS: https://readright.nenome.online
+      PHILIRI_CORS_ORIGINS: http://localhost:8081,http://127.0.0.1:8081
     volumes:
       - model_cache:/model_cache
     restart: unless-stopped
-    networks:
-      default:
-      caddy_net:
-        aliases:
-          - readright-backend
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        API_URL: https://readright.nenome.online
-    expose:
-      - "80"
+        API_URL: http://localhost:8000
+    ports:
+      - "8081:80"
     depends_on:
       - backend
     restart: unless-stopped
-    networks:
-      default:
-      caddy_net:
-        aliases:
-          - readright-frontend
-
-networks:
-  default:
-  caddy_net:
-    external: true
 
 volumes:
   model_cache:
