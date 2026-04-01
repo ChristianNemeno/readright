@@ -24,7 +24,7 @@ set -euo pipefail
 
 VM_NAME="readright-prod"
 MACHINE_TYPE="e2-standard-4"
-DISK_SIZE="50GB"
+DISK_SIZE="20GB"
 NETWORK_TAG="readright-prod"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
