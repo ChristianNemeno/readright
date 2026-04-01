@@ -24,7 +24,7 @@ set -euo pipefail
 
 VM_NAME="readright-prod"
 MACHINE_TYPE="e2-standard-4"
-DISK_SIZE="20GB"
+DISK_SIZE="50GB"
 NETWORK_TAG="readright-prod"
 SSH_OPTS="--strict-host-key-checking=no"
 
@@ -83,11 +83,25 @@ gcloud compute ssh "${VM_NAME}" \
   --project="${GCP_PROJECT}" \
   ${SSH_OPTS} \
   --command="
-    set -e
-    sudo apt-get update -y -qq
-    sudo apt-get install -y -qq docker.io docker-compose-plugin git
-    sudo systemctl enable docker
-    sudo systemctl start docker
+    set -ex
+    # Skip if docker compose already works
+    if sudo docker compose version &>/dev/null; then
+      echo 'Docker Compose already installed, skipping.'
+    else
+      sudo rm -f /etc/apt/sources.list.d/docker.list
+      sudo apt-get update -y -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg git
+      sudo install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/debian/gpg \
+        | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+      sudo chmod a+r /etc/apt/keyrings/docker.gpg
+      echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \$(. /etc/os-release && echo \$VERSION_CODENAME) stable\" \
+        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      sudo apt-get update -y -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      sudo systemctl enable docker
+      sudo systemctl start docker
+    fi
   "
 
 # ── 2. Firewall rules (idempotent) ─────────────────────────────────────────
@@ -126,7 +140,7 @@ gcloud compute ssh "${VM_NAME}" \
   --project="${GCP_PROJECT}" \
   ${SSH_OPTS} \
   --command="
-    set -e
+    set -ex
     if [ -d ~/readright/.git ]; then
       echo 'Repo found, pulling latest...'
       cd ~/readright && git pull
@@ -143,8 +157,12 @@ gcloud compute ssh "${VM_NAME}" \
   --project="${GCP_PROJECT}" \
   ${SSH_OPTS} \
   --command="
-    set -e
+    set -ex
     cd ~/readright
+    df -h /
+    sudo docker image prune -af || true
+    sudo docker builder prune -af || true
+    df -h /
     sudo docker compose -f docker-compose.prod.yml up --build -d
     echo ''
     sudo docker compose -f docker-compose.prod.yml ps
